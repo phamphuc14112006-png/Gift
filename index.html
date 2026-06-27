@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Happy Birthday Bích Thủy</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        
+        /* Giao diện màn hình khóa mật khẩu */
+        #password-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #1a0011 0%, #000000 100%);
+            z-index: 1000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: #fff;
+            transition: opacity 0.8s ease, visibility 0.8s;
+        }
+        .pwd-box {
+            background: rgba(255, 255, 255, 0.04);
+            padding: 30px 40px; border-radius: 20px;
+            border: 1px solid rgba(255, 0, 100, 0.2);
+            box-shadow: 0 0 40px rgba(255, 0, 80, 0.1);
+            text-align: center; max-width: 340px; width: 90%;
+        }
+        .pwd-box h3 { font-size: 18px; margin-bottom: 20px; letter-spacing: 1px; color: #ff4477; text-shadow: 0 0 10px rgba(255,68,119,0.5); }
+        .pwd-input-wrapper { position: relative; margin-bottom: 20px; }
+        .pwd-box input {
+            width: 100%; padding: 12px 20px; background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #ff4477; border-radius: 25px;
+            color: #fff; font-size: 18px; text-align: center; outline: none;
+            letter-spacing: 4px; transition: all 0.3s;
+        }
+        .pwd-box input:focus { box-shadow: 0 0 15px rgba(255, 68, 119, 0.6); }
+        .pwd-box button {
+            width: 100%; padding: 12px; background: linear-gradient(45deg, #ff0055, #ff5500);
+            border: none; color: #fff; font-size: 16px; font-weight: bold;
+            border-radius: 25px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 5px 15px rgba(255, 0, 85, 0.4);
+        }
+        .pwd-box button:active { transform: scale(0.97); }
+        #pwd-error { color: #ff3333; font-size: 13px; margin-top: 12px; display: none; animation: shake 0.4s; }
+
+        #start-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 999; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: #fff; cursor: pointer;
+        }
+        #start-overlay h2 { font-size: 22px; margin-bottom: 15px; letter-spacing: 2px; animation: pulse 1.5s infinite; text-align: center; padding: 0 20px; }
+        #start-overlay p { font-size: 14px; color: #aaa; }
+
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10; pointer-events: none; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+
+        #btn-thoi {
+            position: absolute; bottom: 12%; padding: 15px 50px;
+            background: linear-gradient(45deg, #ff0000, #ff5500); border: none;
+            color: #fff; font-size: 18px; font-weight: bold; border-radius: 30px;
+            cursor: pointer; pointer-events: auto; opacity: 0; transform: translateY(30px);
+            transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            box-shadow: 0 0 30px #ff0000, inset 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        #laser-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #fbf9f3; z-index: 100; display: none; justify-content: center;
+            align-items: center; overflow: hidden;
+        }
+        
+        #laser-text-container {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 25px; font-weight: 900; color: transparent;
+            text-align: center; width: 100%; padding: 0 24px;
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; gap: 20px; user-select: none;
+            perspective: 1200px; line-height: 1.5;
+        }
+
+        .laser-line-text { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
+        .word { display: flex; gap: 0px; align-items: center; }
+        .char { display: inline-block; color: #fbf9f3; position: relative; transform-origin: center center; will-change: transform, color, text-shadow; }
+
+        #laser-line {
+            position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+            background: linear-gradient(to bottom, rgba(255, 0, 0, 0) 0%, rgba(255, 30, 0, 0.4) 40%, #ff1100 85%, #ffffcc 100%);
+            box-shadow: 0 0 12px #ff0000, 0 0 25px #ff3300, 0 0 40px #ff0055;
+            z-index: 104; pointer-events: none; display: none; transform-origin: top center;
+        }
+
+        #laser-spark {
+            position: absolute; width: 18px; height: 18px; background: #fff; border-radius: 50%;
+            box-shadow: 0 0 15px #fff, 0 0 30px #ff1100, 0 0 60px #ffaa00, 0 0 90px #ff0055, 0 0 150px #ff0000;
+            display: none; z-index: 105; pointer-events: none; transform: translate(-50%, -50%);
+        }
+
+        .sparkle-particle { position: absolute; width: 5px; height: 5px; border-radius: 50%; pointer-events: none; z-index: 106; }
+
+        @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+
+        @media (max-width: 480px) {
+            #laser-text-container { font-size: 19px; gap: 14px; padding: 0 15px; }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+<body>
+
+    <div id="password-overlay">
+        <div class="pwd-box">
+            <h3>TRANG WEB ĐƯỢC BẢO MẬT </h3>
+            <div class="pwd-input-wrapper">
+                <input type="password" id="pwd-input" placeholder="Nhập mật khẩu..." onkeydown="if(event.key==='Enter') checkPassword()">
+            </div>
+            <button onclick="checkPassword()">XÁC NHẬN</button>
+            <div id="pwd-error">Mật khẩu chưa chính xác rồi nha! 🥺</div>
+        </div>
+    </div>
+
+    <audio id="bg-music" src="nhac.mp3" preload="auto" loop></audio>
+
+    <div id="start-overlay" onclick="startExperience()">
+        <h2>BẤM VÀO ĐÂY ĐỂ BẮT ĐẦU </h2>
+    </div>
+
+    <div id="ui-layer">
+        <button id="btn-thoi" onclick="triggerLaserCut()">THỔI NẾN</button>
+    </div>
+
+    <div id="laser-screen">
+        <div id="laser-line"></div>
+        <div id="laser-spark"></div>
+        <div id="laser-text-container">
+            <div class="laser-line-text">
+                <div class="word"><span class="char">"</span><span class="char">C</span><span class="char">a</span><span class="char">o</span></div>
+                <div class="word"><span class="char">r</span><span class="char">ă</span><span class="char">n</span><span class="char">g</span></div>
+                <div class="word"><span class="char">đ</span><span class="char">ộ</span></div>
+                <div class="word"><span class="char">4</span><span class="char">"</span></div>
+                <div class="word"><span class="char">c</span><span class="char">h</span><span class="char">ú</span><span class="char">c</span></div>
+                <div class="word"><span class="char">c</span><span class="char">ô</span></div>
+                <div class="word"><span class="char">n</span><span class="char">ư</span><span class="char">ơ</span><span class="char">n</span><span class="char">g</span></div>
+                <div class="word"><span class="char">t</span><span class="char">u</span><span class="char">ổ</span><span class="char">i</span></div>
+                <div class="word"><span class="char">m</span><span class="char">ớ</span><span class="char">i</span></div>
+                <div class="word"><span class="char">t</span><span class="char">h</span><span class="char">ê</span><span class="char">m</span></div>
+                <div class="word"><span class="char">x</span><span class="char">i</span><span class="char">n</span><span class="char">h</span></div>
+                <div class="word"><span class="char">đ</span><span class="char">ẹ</span><span class="char">p</span></div>
+                <div class="word"><span class="char">r</span><span class="char">ự</span><span class="char">c</span></div>
+                <div class="word"><span class="char">r</span><span class="char">ỡ</span></div>
+            </div>
+            <div class="laser-line-text">
+                <div class="word"><span class="char">L</span><span class="char">u</span><span class="char">ô</span><span class="char">n</span></div>
+                <div class="word"><span class="char">g</span><span class="char">i</span><span class="char">ữ</span></div>
+                <div class="word"><span class="char">đ</span><span class="char">ư</span><span class="char">ợ</span><span class="char">c</span></div>
+                <div class="word"><span class="char">n</span><span class="char">ụ</span></div>
+                <div class="word"><span class="char">c</span><span class="char">ư</span><span class="char">ờ</span><span class="char">i</span></div>
+                <div class="word"><span class="char">h</span><span class="char">ạ</span><span class="char">n</span><span class="char">h</span></div>
+                <div class="word"><span class="char">p</span><span class="char">h</span><span class="char">ú</span><span class="char">c</span></div>
+                <div class="word"><span class="char">t</span><span class="char">r</span><span class="char">ê</span><span class="char">n</span></div>
+                <div class="word"><span class="char">m</span><span class="char">ô</span><span class="char">i</span></div>
+            </div>
+            <div class="laser-line-text">
+                <div class="word"><span class="char">B</span><span class="char">ớ</span><span class="char">t</span></div>
+                <div class="word"><span class="char">b</span><span class="char">ậ</span><span class="char">n</span></div>
+                <div class="word"><span class="char">r</span><span class="char">ộ</span><span class="char">n</span></div>
+                <div class="word"><span class="char">đ</span><span class="char">ể</span></div>
+                <div class="word"><span class="char">d</span><span class="char">à</span><span class="char">n</span><span class="char">h</span></div>
+                <div class="word"><span class="char">t</span><span class="char">h</span><span class="char">ờ</span><span class="char">i</span></div>
+                <div class="word"><span class="char">g</span><span class="char">i</span><span class="char">a</span><span class="char">n</span></div>
+                <div class="word"><span class="char">c</span><span class="char">h</span><span class="char">o</span></div>
+                <div class="word"><span class="char">b</span><span class="char">ả</span><span class="char">n</span></div>
+                <div class="word"><span class="char">t</span><span class="char">h</span><span class="char">â</span><span class="char">n</span></div>
+                <div class="word"><span class="char">m</span><span class="char">à</span></div>
+                <div class="word"><span class="char">v</span><span class="char">ẫ</span><span class="char">n</span></div>
+                <div class="word"><span class="char">c</span><span class="char">ó</span></div>
+                <div class="word"><span class="char">n</span><span class="char">h</span><span class="char">i</span><span class="char">ề</span><span class="char">u</span></div>
+                <div class="word"><span class="char">t</span><span class="char">i</span><span class="char">ề</span><span class="char">n</span></div>
+                <div class="word"><span class="char">:</span><span class="char">"</span><span class="char">)</span><span class="char">)</span><span class="char">)</span></div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="webgl-canvas"></canvas>
+
+    <script>
+        // Hàm kiểm tra mật khẩu bảo mật công khai
+        function checkPassword() {
+            const input = document.getElementById('pwd-input').value;
+            const errorHint = document.getElementById('pwd-error');
+            
+            if (input === '079199012523') {
+                const overlay = document.getElementById('password-overlay');
+                overlay.style.opacity = '0';
+                setTimeout(() => { overlay.style.display = 'none'; }, 800);
+            } else {
+                errorHint.style.display = 'block';
+                errorHint.style.animation = 'none';
+                errorHint.offsetHeight; 
+                errorHint.style.animation = 'shake 0.4s';
+            }
+        }
+
+        let scene, camera, renderer, particleSystem;
+        let textGroup3D;
+        let particleCount = 350000; 
+
+        (function adaptParticleCountForDevice() {
+            const isSmallScreen = window.innerWidth < 700;
+            const isLowCore = (navigator.hardwareConcurrency || 4) <= 4;
+            if (isSmallScreen || isLowCore) particleCount = 120000;
+        })();
+
+        let positions, colors;        
+        let baseX, baseY, baseZ;      
+
+        let clock = new THREE.Clock();
+        let currentShape = "vortex";
+        let hbdCoordsCache = [];
+
+        const audio = document.getElementById('bg-music');
+
+        const HEART_TOTAL_TIME   = 8.0; 
+        const TEXT_REV_DURATION  = 2.5;
+        const TEXT_DIRECTION     = 1;     
+
+        let heartPhaseStartTime = 0;
+        let isHeartRotating = false;
+        let heartCycleResolved = false;
+        let heartOnCycleComplete = null;
+        let heartbeatTimeline = null;
+        const pulseProxy = { value: 1 };
+        let heartPulseScale = 1;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            hbdCoordsCache = preRenderSplitText("HAPPY", "BIRTHDAY", 650, 260, 64, 0.32, 0.68, 34, 15);
+        });
+
+        function preRenderSplitText(line1, line2, width, height, fontSize, y1Factor, y2Factor, scaleX, scaleY) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(line1, width / 2, height * y1Factor);
+            ctx.fillText(line2, width / 2, height * y2Factor);
+            
+            const imgData = ctx.getImageData(0, 0, width, height).data;
+            const coords = [];
+            for (let y = 0; y < height; y++) { 
+                for (let x = 0; x < width; x++) {
+                    let idx = (y * width + x) * 4;
+                    if (imgData[idx] > 120) {
+                        coords.push({ x: ((x / width) - 0.5) * scaleX, y: -((y / height) - 0.5) * scaleY });
+                    }
+                }
+            }
+            return coords;
+        }
+
+        function createSolid3DText(text, yOffset, size = 1.6) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold 72px Arial`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(text, 256, 64);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const geometry = new THREE.PlaneGeometry(size * 4, size);
+            const material = new THREE.MeshStandardMaterial({
+                map: texture, transparent: true, side: THREE.DoubleSide, roughness: 0.1, metalness: 0.9,
+                emissive: new THREE.Color(0x00bfff), emissiveIntensity: 1.4
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.y = yOffset;
+            
+            const depthGroup = new THREE.Group();
+            for(let j=0; j<10; j++) {
+                let layer = mesh.clone(); layer.position.z = -j * 0.07;
+                depthGroup.add(layer);
+            }
+            return depthGroup;
+        }
+
+        function startExperience() {
+            document.getElementById('start-overlay').style.display = 'none';
+            audio.play().catch(e => console.log("Audio play blocked", e));
+            init3D();
+            runTimeline();
+        }
+
+        function init3D() {
+            const canvas = document.getElementById('webgl-canvas');
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 28);
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            dirLight.position.set(5, 12, 15); scene.add(dirLight);
+            const ambientLight = new THREE.AmbientLight(0x404040, 1.8); scene.add(ambientLight);
+
+            textGroup3D = new THREE.Group();
+            const nameMesh = createSolid3DText("BÍCH THỦY", 0.9, 1.8);
+            const numMesh = createSolid3DText("27", -1.1, 2.0);
+            textGroup3D.add(nameMesh); textGroup3D.add(numMesh);
+            textGroup3D.position.set(0, 0.5, 0); textGroup3D.scale.set(0, 0, 0); 
+            scene.add(textGroup3D);
+
+            positions = new Float32Array(particleCount * 3);
+            colors = new Float32Array(particleCount * 3);
+            baseX = new Float32Array(particleCount); baseY = new Float32Array(particleCount); baseZ = new Float32Array(particleCount);
+
+            for (let i = 0; i < particleCount; i++) {
+                let theta = Math.random() * Math.PI * 2; let r = Math.random() * 22 + 2;
+                positions[i*3]   = Math.sin(theta) * r;
+                positions[i*3+1] = -35 + (Math.random() - 0.5) * 4; 
+                positions[i*3+2] = Math.cos(theta) * r;
+                colors[i*3] = 1.0; colors[i*3+1] = 1.0; colors[i*3+2] = 1.0;
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const pCanvas = document.createElement('canvas'); pCanvas.width = 16; pCanvas.height = 16;
+            const pCtx = pCanvas.getContext('2d');
+            let grad = pCtx.createRadialGradient(8,8,0, 8,8,8);
+            grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.4)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+            pCtx.fillStyle = grad; pCtx.fillRect(0,0,16,16);
+            const pTexture = new THREE.CanvasTexture(pCanvas);
+
+            const material = new THREE.PointsMaterial({ size: 0.02, map: pTexture, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
+
+            render();
+        }
+
+        function render() {
+            requestAnimationFrame(render);
+            const time = clock.getElapsedTime();
+            if (currentShape === "text") { particleSystem.rotation.y = Math.sin(time * 0.2) * 0.15; } 
+            else if (currentShape === "vortex" || currentShape === "cake") { particleSystem.rotation.y += 0.005; } 
+            else { particleSystem.rotation.y = 0; }
+
+            if (isHeartRotating) { updateHeartPhase(time); }
+            renderer.render(scene, camera);
+        }
+
+        function runMorph(targetX, targetY, targetZ, targetR, targetG, targetB, duration, ease, onComplete) {
+            const fromPos = positions.slice(); const fromCol = colors.slice();
+            const posAttr = particleSystem.geometry.attributes.position;
+            const colAttr = particleSystem.geometry.attributes.color;
+            const tweenState = { t: 0 };
+
+            gsap.to(tweenState, {
+                t: 1, duration: duration, ease: ease,
+                onUpdate: () => {
+                    const t = tweenState.t;
+                    for (let i = 0; i < particleCount; i++) {
+                        const idx = i * 3;
+                        positions[idx]   = fromPos[idx]   + (targetX[i] - fromPos[idx])   * t;
+                        positions[idx+1] = fromPos[idx+1] + (targetY[i] - fromPos[idx+1]) * t;
+                        positions[idx+2] = fromPos[idx+2] + (targetZ[i] - fromPos[idx+2]) * t;
+                        colors[idx]   = fromCol[idx]   + (targetR[i] - fromCol[idx])   * t;
+                        colors[idx+1] = fromCol[idx+1] + (targetG[i] - fromCol[idx+1]) * t;
+                        colors[idx+2] = fromCol[idx+2] + (targetB[i] - fromCol[idx+2]) * t;
+                    }
+                    posAttr.needsUpdate = true; colAttr.needsUpdate = true;
+                },
+                onComplete: () => {
+                    for (let i = 0; i < particleCount; i++) {
+                        const idx = i * 3;
+                        positions[idx] = targetX[i]; positions[idx+1] = targetY[i]; positions[idx+2] = targetZ[i];
+                        colors[idx] = targetR[i]; colors[idx+1] = targetG[i]; colors[idx+2] = targetB[i];
+                    }
+                    posAttr.needsUpdate = true; colAttr.needsUpdate = true;
+                    if (onComplete) onComplete();
+                }
+            });
+        }
+
+        function setTextShape() {
+            currentShape = "text";
+            const coords = hbdCoordsCache;
+            const targetX = new Float32Array(particleCount); const targetY = new Float32Array(particleCount); const targetZ = new Float32Array(particleCount);
+            const targetR = new Float32Array(particleCount).fill(1); const targetG = new Float32Array(particleCount).fill(1); const targetB = new Float32Array(particleCount).fill(1);
+
+            for (let i = 0; i < particleCount; i++) {
+                const coord = coords[i % coords.length];
+                targetX[i] = coord.x + (Math.random() - 0.5) * 0.15; targetY[i] = coord.y + (Math.random() - 0.5) * 0.15; targetZ[i] = (Math.random() - 0.5) * 0.8;
+            }
+            runMorph(targetX, targetY, targetZ, targetR, targetG, targetB, 3.5, "power2.out");
+        }
+
+        function setHeartShape(onCycleComplete) {
+            currentShape = "heart-forming"; isHeartRotating = false; heartCycleResolved = false; heartPulseScale = 1; pulseProxy.value = 1; heartOnCycleComplete = onCycleComplete;
+            if (heartbeatTimeline) { heartbeatTimeline.kill(); heartbeatTimeline = null; }
+            gsap.to(textGroup3D.scale, { x: 1, y: 1, z: 1, duration: 3.0, ease: "back.out(1.2)", delay: 0.8 });
+
+            const targetX = new Float32Array(particleCount); const targetY = new Float32Array(particleCount); const targetZ = new Float32Array(particleCount);
+            const targetR = new Float32Array(particleCount); const targetG = new Float32Array(particleCount); const targetB = new Float32Array(particleCount);
+
+            for (let i = 0; i < particleCount; i++) {
+                const phi = Math.random() * Math.PI * 2; const theta = Math.random() * Math.PI; const sinT = Math.sin(theta);
+                const bx = 16 * Math.pow(sinT, 3) * Math.sin(phi) * 0.82;
+                const by = (13 * Math.cos(theta) - 5 * Math.cos(2*theta) - 2 * Math.cos(3*theta) - Math.cos(4*theta)) * 0.82 + 2;
+                const bz = (12 * Math.pow(sinT, 3) * Math.cos(phi)) * (0.35 + Math.random() * 0.45) * 0.82;
+
+                baseX[i] = bx; baseY[i] = by; baseZ[i] = bz; targetX[i] = bx; targetY[i] = by; targetZ[i] = bz; 
+                const isBright = Math.random() > 0.4; targetR[i] = isBright ? 1.0 : 0.9; targetG[i] = isBright ? 0.12 : 0.0; targetB[i] = isBright ? 0.55 : 0.25;
+            }
+
+            runMorph(targetX, targetY, targetZ, targetR, targetG, targetB, 4.5, "power2.inOut", () => {
+                currentShape = "heart"; heartPhaseStartTime = clock.getElapsedTime(); isHeartRotating = true;
+                startHeartbeatLoop();
+            });
+        }
+
+        function updateHeartPhase(time) {
+            const elapsed = time - heartPhaseStartTime;
+            const scale = heartPulseScale;
+
+            for (let i = 0; i < particleCount; i++) {
+                const idx = i * 3;
+                positions[idx]   = baseX[i] * scale;
+                positions[idx+1] = baseY[i] * scale;
+                positions[idx+2] = baseZ[i] * scale;
+            }
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+
+            textGroup3D.rotation.y = TEXT_DIRECTION * elapsed * (Math.PI * 2 / TEXT_REV_DURATION);
+
+            if (elapsed >= HEART_TOTAL_TIME && !heartCycleResolved) {
+                heartCycleResolved = true;
+                isHeartRotating = false;
+                if (heartbeatTimeline) { heartbeatTimeline.kill(); heartbeatTimeline = null; }
+                heartPulseScale = 1; pulseProxy.value = 1;
+                if (typeof heartOnCycleComplete === "function") heartOnCycleComplete();
+            }
+        }
+
+        function startHeartbeatLoop() {
+            if (heartbeatTimeline) heartbeatTimeline.kill();
+            heartbeatTimeline = gsap.timeline({ repeat: -1 })
+                .to(pulseProxy, { value: 1.18, duration: 0.16, ease: "power2.out", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
+                .to(pulseProxy, { value: 0.95, duration: 0.14, ease: "power1.inOut", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
+                .to(pulseProxy, { value: 1.09, duration: 0.12, ease: "power1.out", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
+                .to(pulseProxy, { value: 1.0, duration: 0.28, ease: "power2.inOut", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
+                .to(pulseProxy, { value: 1.0, duration: 0.5 });
+        }
+
+        function setCakeShape() {
+            currentShape = "cake-forming";
+            gsap.to(textGroup3D.scale, { x: 0, y: 0, z: 0, duration: 1.5, ease: "power2.in" });
+
+            const targetX = new Float32Array(particleCount); const targetY = new Float32Array(particleCount); const targetZ = new Float32Array(particleCount);
+            const targetR = new Float32Array(particleCount); const targetG = new Float32Array(particleCount); const targetB = new Float32Array(particleCount);
+
+            for (let i = 0; i < particleCount; i++) {
+                let tx, ty, tz, r, g, b;
+                if (i < particleCount * 0.15) {
+                    const theta = Math.random() * Math.PI * 2; const radius = 14 * Math.sqrt(Math.random());
+                    tx = Math.sin(theta) * radius; ty = -8; tz = Math.cos(theta) * radius; r = 0.75; g = 0.55; b = 0.15;
+                } else if (i < particleCount * 0.70) {
+                    const theta = Math.random() * Math.PI * 2; const radius = 10.5 * (0.88 + Math.random() * 0.12);
+                    tx = Math.sin(theta) * radius; ty = -8 + Math.random() * 9; tz = Math.cos(theta) * radius; r = 1.0; g = 0.85; b = 0.0;
+                } else if (i < particleCount * 0.85) {
+                    tx = (Math.random() - 0.5) * 0.6; ty = 1 + Math.random() * 4; tz = (Math.random() - 0.5) * 0.6; r = 0.85; g = 0.85; b = 0.85;
+                } else {
+                    const randTheta = Math.random() * Math.PI * 2; const h = Math.random() * 4.0;
+                    const widthFactor = Math.sin((h / 4.0) * Math.PI) * (1.0 - (h / 4.0) * 0.5) * 1.1;
+                    tx = Math.sin(randTheta) * widthFactor; ty = 5.0 + h; tz = Math.cos(randTheta) * widthFactor;
+                    if (h < 0.5) { r = 0.1; g = 0.5; b = 1.0; } else if (h < 2.5) { r = 1.0; g = 0.65; b = 0.0; } else { r = 1.0; g = 0.1; b = 0.0; }
+                }
+                targetX[i] = tx; targetY[i] = ty; targetZ[i] = tz; targetR[i] = r; targetG[i] = g; targetB[i] = b;
+            }
+
+            runMorph(targetX, targetY, targetZ, targetR, targetG, targetB, 5.5, "power3.inOut", () => {
+                currentShape = "cake"; gsap.to("#btn-thoi", { opacity: 1, y: 0, duration: 1.5, delay: 0.3 });
+            });
+        }
+
+        function runTimeline() {
+            let tl = gsap.timeline();
+            tl.call(() => setTextShape(), null, 0);
+            tl.to({}, { duration: 5.5 }); 
+            tl.call(() => { setHeartShape(() => { setCakeShape(); }); });
+        }
+
+        function createPremiumSparks(x, y) {
+            const container = document.getElementById('laser-screen');
+            const colors = ['#ff2200', '#ff6600', '#ffcc00', '#ffffff'];
+            
+            for (let i = 0; i < 15; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'sparkle-particle';
+                particle.style.left = `${x}px`;
+                particle.style.top = `${y}px`;
+                particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                particle.style.boxShadow = `0 0 6px ${particle.style.background}`;
+                container.appendChild(particle);
+
+                const angle = (Math.random() * Math.PI * 1.4) - (Math.PI * 0.2);
+                const speed = Math.random() * 90 + 50;
+                
+                gsap.to(particle, {
+                    x: Math.cos(angle) * speed,
+                    y: Math.sin(angle) * speed + (Math.random() * 40 + 20),
+                    opacity: 0,
+                    scale: Math.random() * 0.8 + 0.2,
+                    duration: Math.random() * 0.5 + 0.3,
+                    ease: "power1.out",
+                    onComplete: () => particle.remove()
+                });
+            }
+        }
+
+        function triggerLaserCut() {
+            const laserScreen = document.getElementById('laser-screen');
+            const laserSpark = document.getElementById('laser-spark');
+            const laserLine = document.getElementById('laser-line');
+            const chars = document.querySelectorAll('.char');
+            
+            laserScreen.style.display = 'flex';
+            laserSpark.style.display = 'block';
+            laserLine.style.display = 'block';
+
+            const laserTimeline = gsap.timeline({
+                onComplete: () => {
+                    gsap.to([laserSpark, laserLine], { opacity: 0, duration: 0.4, onComplete: () => {
+                        laserSpark.style.display = 'none';
+                        laserLine.style.display = 'none';
+                    }});
+                }
+            });
+
+            const stepDuration = 0.07;
+
+            chars.forEach((charElement, index) => {
+                const rect = charElement.getBoundingClientRect();
+                const targetX = rect.left + rect.width / 2;
+                const targetY = rect.top + rect.height / 2;
+
+                if (index === 0) {
+                    laserTimeline.set(laserSpark, { top: targetY, left: targetX });
+                    laserTimeline.set(laserLine, { left: targetX, height: targetY });
+                } else {
+                    laserTimeline.to(laserSpark, { left: targetX, top: targetY, duration: stepDuration, ease: "none" }, index * stepDuration);
+                    laserTimeline.to(laserLine, { left: targetX, height: targetY, duration: stepDuration, ease: "none" }, index * stepDuration);
+                }
+
+                laserTimeline.call(() => {
+                    createPremiumSparks(targetX, targetY);
+                    charElement.style.color = '#ff1100';
+                    charElement.style.textShadow = '0 0 12px #ff1100, 0 0 25px #ff6600, 0 0 45px #ffaa00, 0 0 70px #ff0000';
+
+                    gsap.to(charElement, {
+                        y: Math.random() * 6 + 4, 
+                        x: (Math.random() - 0.5) * 2,
+                        rotationZ: (Math.random() - 0.5) * 4,
+                        duration: 0.3,
+                        ease: "power1.out"
+                    });
+
+                    gsap.to(charElement, {
+                        color: '#111111', 
+                        textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
+                        duration: 0.5,
+                        delay: 0.15
+                    });
+                }, null, index * stepDuration);
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            if(camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+    </script>
+</body>
+</html>
