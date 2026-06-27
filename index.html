@@ -9,7 +9,6 @@
         body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         
-        /* Giao diện màn hình khóa mật khẩu */
         #password-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle, #1a0011 0%, #000000 100%);
@@ -187,7 +186,6 @@
     <canvas id="webgl-canvas"></canvas>
 
     <script>
-        // Hàm kiểm tra mật khẩu bảo mật công khai
         function checkPassword() {
             const input = document.getElementById('pwd-input').value;
             const errorHint = document.getElementById('pwd-error');
@@ -207,11 +205,15 @@
         let scene, camera, renderer, particleSystem;
         let textGroup3D;
         let particleCount = 350000; 
+        let isMobileDevice = false;
+        let globalScaleFactor = 1.0; 
 
-        (function adaptParticleCountForDevice() {
-            const isSmallScreen = window.innerWidth < 700;
-            const isLowCore = (navigator.hardwareConcurrency || 4) <= 4;
-            if (isSmallScreen || isLowCore) particleCount = 120000;
+        (function detectDeviceAndScale() {
+            isMobileDevice = window.innerWidth < 700 || (navigator.hardwareConcurrency || 4) <= 4;
+            if (isMobileDevice) {
+                particleCount = 100000;
+                globalScaleFactor = 0.55;
+            }
         })();
 
         let positions, colors;        
@@ -236,7 +238,9 @@
         let heartPulseScale = 1;
 
         window.addEventListener('DOMContentLoaded', () => {
-            hbdCoordsCache = preRenderSplitText("HAPPY", "BIRTHDAY", 650, 260, 64, 0.32, 0.68, 34, 15);
+            let textScaleX = isMobileDevice ? 20 : 34;
+            let textScaleY = isMobileDevice ? 10 : 15;
+            hbdCoordsCache = preRenderSplitText("HAPPY", "BIRTHDAY", 650, 260, 64, 0.32, 0.68, textScaleX, textScaleY);
         });
 
         function preRenderSplitText(line1, line2, width, height, fontSize, y1Factor, y2Factor, scaleX, scaleY) {
@@ -280,11 +284,11 @@
             });
 
             const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.y = yOffset;
+            mesh.position.y = yOffset * globalScaleFactor;
             
             const depthGroup = new THREE.Group();
             for(let j=0; j<10; j++) {
-                let layer = mesh.clone(); layer.position.z = -j * 0.07;
+                let layer = mesh.clone(); layer.position.z = -j * 0.04;
                 depthGroup.add(layer);
             }
             return depthGroup;
@@ -312,10 +316,11 @@
             const ambientLight = new THREE.AmbientLight(0x404040, 1.8); scene.add(ambientLight);
 
             textGroup3D = new THREE.Group();
-            const nameMesh = createSolid3DText("BÍCH THỦY", 0.9, 1.8);
-            const numMesh = createSolid3DText("27", -1.1, 2.0);
+            let baseTextSize = isMobileDevice ? 1.3 : 1.8;
+            const nameMesh = createSolid3DText("BÍCH THỦY", 1.1, baseTextSize);
+            const numMesh = createSolid3DText("27", -1.1, baseTextSize + 0.2);
             textGroup3D.add(nameMesh); textGroup3D.add(numMesh);
-            textGroup3D.position.set(0, 0.5, 0); textGroup3D.scale.set(0, 0, 0); 
+            textGroup3D.position.set(0, 0.2, 0); textGroup3D.scale.set(0, 0, 0); 
             scene.add(textGroup3D);
 
             positions = new Float32Array(particleCount * 3);
@@ -323,7 +328,7 @@
             baseX = new Float32Array(particleCount); baseY = new Float32Array(particleCount); baseZ = new Float32Array(particleCount);
 
             for (let i = 0; i < particleCount; i++) {
-                let theta = Math.random() * Math.PI * 2; let r = Math.random() * 22 + 2;
+                let theta = Math.random() * Math.PI * 2; let r = (Math.random() * 22 + 2) * globalScaleFactor;
                 positions[i*3]   = Math.sin(theta) * r;
                 positions[i*3+1] = -35 + (Math.random() - 0.5) * 4; 
                 positions[i*3+2] = Math.cos(theta) * r;
@@ -341,7 +346,8 @@
             pCtx.fillStyle = grad; pCtx.fillRect(0,0,16,16);
             const pTexture = new THREE.CanvasTexture(pCanvas);
 
-            const material = new THREE.PointsMaterial({ size: 0.02, map: pTexture, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+            let pSize = isMobileDevice ? 0.035 : 0.02;
+            const material = new THREE.PointsMaterial({ size: pSize, map: pTexture, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
             particleSystem = new THREE.Points(geometry, material);
             scene.add(particleSystem);
 
@@ -407,17 +413,20 @@
 
         function setHeartShape(onCycleComplete) {
             currentShape = "heart-forming"; isHeartRotating = false; heartCycleResolved = false; heartPulseScale = 1; pulseProxy.value = 1; heartOnCycleComplete = onCycleComplete;
-            if (heartbeatTimeline) { heartbeatTimeline.kill(); heartbeatTimeline = null; }
-            gsap.to(textGroup3D.scale, { x: 1, y: 1, z: 1, duration: 3.0, ease: "back.out(1.2)", delay: 0.8 });
+            
+            let textFinalScale = isMobileDevice ? 0.65 : 1.0;
+            gsap.to(textGroup3D.scale, { x: textFinalScale, y: textFinalScale, z: textFinalScale, duration: 3.0, ease: "back.out(1.2)", delay: 0.8 });
 
             const targetX = new Float32Array(particleCount); const targetY = new Float32Array(particleCount); const targetZ = new Float32Array(particleCount);
             const targetR = new Float32Array(particleCount); const targetG = new Float32Array(particleCount); const targetB = new Float32Array(particleCount);
 
+            let heartSizeModifier = 16 * 0.82 * globalScaleFactor;
+
             for (let i = 0; i < particleCount; i++) {
                 const phi = Math.random() * Math.PI * 2; const theta = Math.random() * Math.PI; const sinT = Math.sin(theta);
-                const bx = 16 * Math.pow(sinT, 3) * Math.sin(phi) * 0.82;
-                const by = (13 * Math.cos(theta) - 5 * Math.cos(2*theta) - 2 * Math.cos(3*theta) - Math.cos(4*theta)) * 0.82 + 2;
-                const bz = (12 * Math.pow(sinT, 3) * Math.cos(phi)) * (0.35 + Math.random() * 0.45) * 0.82;
+                const bx = Math.pow(sinT, 3) * Math.sin(phi) * heartSizeModifier;
+                const by = ((13 * Math.cos(theta) - 5 * Math.cos(2*theta) - 2 * Math.cos(3*theta) - Math.cos(4*theta)) * 0.82 * globalScaleFactor) + (2 * globalScaleFactor);
+                const bz = (12 * Math.pow(sinT, 3) * Math.cos(phi)) * (0.35 + Math.random() * 0.45) * 0.82 * globalScaleFactor;
 
                 baseX[i] = bx; baseY[i] = by; baseZ[i] = bz; targetX[i] = bx; targetY[i] = by; targetZ[i] = bz; 
                 const isBright = Math.random() > 0.4; targetR[i] = isBright ? 1.0 : 0.9; targetG[i] = isBright ? 0.12 : 0.0; targetB[i] = isBright ? 0.55 : 0.25;
@@ -455,9 +464,9 @@
         function startHeartbeatLoop() {
             if (heartbeatTimeline) heartbeatTimeline.kill();
             heartbeatTimeline = gsap.timeline({ repeat: -1 })
-                .to(pulseProxy, { value: 1.18, duration: 0.16, ease: "power2.out", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
-                .to(pulseProxy, { value: 0.95, duration: 0.14, ease: "power1.inOut", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
-                .to(pulseProxy, { value: 1.09, duration: 0.12, ease: "power1.out", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
+                .to(pulseProxy, { value: 1.15, duration: 0.16, ease: "power2.out", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
+                .to(pulseProxy, { value: 0.96, duration: 0.14, ease: "power1.inOut", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
+                .to(pulseProxy, { value: 1.07, duration: 0.12, ease: "power1.out", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
                 .to(pulseProxy, { value: 1.0, duration: 0.28, ease: "power2.inOut", onUpdate: () => { heartPulseScale = pulseProxy.value; } })
                 .to(pulseProxy, { value: 1.0, duration: 0.5 });
         }
@@ -469,21 +478,25 @@
             const targetX = new Float32Array(particleCount); const targetY = new Float32Array(particleCount); const targetZ = new Float32Array(particleCount);
             const targetR = new Float32Array(particleCount); const targetG = new Float32Array(particleCount); const targetB = new Float32Array(particleCount);
 
+            let cakeRadiusBase = 14 * globalScaleFactor;
+            let cakeLayerRadius = 10.5 * globalScaleFactor;
+            let cakeYOffset = -5 * globalScaleFactor;
+
             for (let i = 0; i < particleCount; i++) {
                 let tx, ty, tz, r, g, b;
                 if (i < particleCount * 0.15) {
-                    const theta = Math.random() * Math.PI * 2; const radius = 14 * Math.sqrt(Math.random());
-                    tx = Math.sin(theta) * radius; ty = -8; tz = Math.cos(theta) * radius; r = 0.75; g = 0.55; b = 0.15;
+                    const theta = Math.random() * Math.PI * 2; const radius = cakeRadiusBase * Math.sqrt(Math.random());
+                    tx = Math.sin(theta) * radius; ty = cakeYOffset; tz = Math.cos(theta) * radius; r = 0.75; g = 0.55; b = 0.15;
                 } else if (i < particleCount * 0.70) {
-                    const theta = Math.random() * Math.PI * 2; const radius = 10.5 * (0.88 + Math.random() * 0.12);
-                    tx = Math.sin(theta) * radius; ty = -8 + Math.random() * 9; tz = Math.cos(theta) * radius; r = 1.0; g = 0.85; b = 0.0;
+                    const theta = Math.random() * Math.PI * 2; const radius = cakeLayerRadius * (0.88 + Math.random() * 0.12);
+                    tx = Math.sin(theta) * radius; ty = cakeYOffset + (Math.random() * 9 * globalScaleFactor); tz = Math.cos(theta) * radius; r = 1.0; g = 0.85; b = 0.0;
                 } else if (i < particleCount * 0.85) {
-                    tx = (Math.random() - 0.5) * 0.6; ty = 1 + Math.random() * 4; tz = (Math.random() - 0.5) * 0.6; r = 0.85; g = 0.85; b = 0.85;
+                    tx = (Math.random() - 0.5) * 0.6 * globalScaleFactor; ty = (1 * globalScaleFactor) + (Math.random() * 4 * globalScaleFactor); tz = (Math.random() - 0.5) * 0.6 * globalScaleFactor; r = 0.85; g = 0.85; b = 0.85;
                 } else {
-                    const randTheta = Math.random() * Math.PI * 2; const h = Math.random() * 4.0;
-                    const widthFactor = Math.sin((h / 4.0) * Math.PI) * (1.0 - (h / 4.0) * 0.5) * 1.1;
-                    tx = Math.sin(randTheta) * widthFactor; ty = 5.0 + h; tz = Math.cos(randTheta) * widthFactor;
-                    if (h < 0.5) { r = 0.1; g = 0.5; b = 1.0; } else if (h < 2.5) { r = 1.0; g = 0.65; b = 0.0; } else { r = 1.0; g = 0.1; b = 0.0; }
+                    const randTheta = Math.random() * Math.PI * 2; const h = Math.random() * 4.0 * globalScaleFactor;
+                    const widthFactor = Math.sin((h / (4.0 * globalScaleFactor)) * Math.PI) * (1.0 - (h / (4.0 * globalScaleFactor)) * 0.5) * 1.1 * globalScaleFactor;
+                    tx = Math.sin(randTheta) * widthFactor; ty = (4.0 * globalScaleFactor) + h; tz = Math.cos(randTheta) * widthFactor;
+                    if (h < 0.5 * globalScaleFactor) { r = 0.1; g = 0.5; b = 1.0; } else if (h < 2.5 * globalScaleFactor) { r = 1.0; g = 0.65; b = 0.0; } else { r = 1.0; g = 0.1; b = 0.0; }
                 }
                 targetX[i] = tx; targetY[i] = ty; targetZ[i] = tz; targetR[i] = r; targetG[i] = g; targetB[i] = b;
             }
@@ -503,8 +516,9 @@
         function createPremiumSparks(x, y) {
             const container = document.getElementById('laser-screen');
             const colors = ['#ff2200', '#ff6600', '#ffcc00', '#ffffff'];
+            let sparkCount = isMobileDevice ? 8 : 15;
             
-            for (let i = 0; i < 15; i++) {
+            for (let i = 0; i < sparkCount; i++) {
                 const particle = document.createElement('div');
                 particle.className = 'sparkle-particle';
                 particle.style.left = `${x}px`;
@@ -547,7 +561,7 @@
                 }
             });
 
-            const stepDuration = 0.07;
+            const stepDuration = isMobileDevice ? 0.05 : 0.07;
 
             chars.forEach((charElement, index) => {
                 const rect = charElement.getBoundingClientRect();
