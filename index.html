@@ -201,27 +201,30 @@
             }
         }
 
-        // ─── Responsive scale helper ───────────────────────────────────────────
-        // Trả về hệ số scale dựa trên chiều rộng màn hình
-        // laptop ~1 : tablet ~0.7 : phone ~0.5
+        // ─── Responsive scale helpers ──────────────────────────────────────────
         function getResponsiveScale() {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-            const minDim = Math.min(w, h);
-            if (minDim < 400) return 0.42;      // phone nhỏ
-            if (minDim < 500) return 0.52;      // phone thường
-            if (minDim < 700) return 0.65;      // phone lớn / tablet nhỏ
-            if (minDim < 900) return 0.80;      // tablet
-            return 1.0;                          // laptop / desktop
+            const minDim = Math.min(window.innerWidth, window.innerHeight);
+            if (minDim < 400) return 0.42;
+            if (minDim < 500) return 0.52;
+            if (minDim < 700) return 0.65;
+            if (minDim < 900) return 0.80;
+            return 1.0;
+        }
+
+        // Scale riêng cho chữ 3D (PlaneGeometry size)
+        function getResponsiveTextScale() {
+            const minDim = Math.min(window.innerWidth, window.innerHeight);
+            if (minDim < 400) return 0.38;   // phone nhỏ
+            if (minDim < 500) return 0.48;   // phone thường
+            if (minDim < 700) return 0.60;   // phone lớn / tablet nhỏ
+            if (minDim < 900) return 0.75;   // tablet
+            return 1.0;                       // laptop / desktop
         }
 
         // Camera Z phù hợp để toàn bộ scene vừa màn hình
         function getResponsiveCameraZ() {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-            const minDim = Math.min(w, h);
-            // Nếu portrait (phone dọc) cần kéo camera ra xa hơn
-            const portrait = h > w;
+            const minDim = Math.min(window.innerWidth, window.innerHeight);
+            const portrait = window.innerHeight > window.innerWidth;
             if (minDim < 400) return portrait ? 42 : 36;
             if (minDim < 500) return portrait ? 38 : 32;
             if (minDim < 700) return portrait ? 34 : 30;
@@ -286,7 +289,7 @@
             return coords;
         }
 
-        function createSolid3DText(text, yOffset, size = 1.6) {
+        function createSolid3DText(text, yOffset, size = 1.6, textScale = 1.0) {
             const canvas = document.createElement('canvas');
             canvas.width = 512; canvas.height = 128;
             const ctx = canvas.getContext('2d');
@@ -295,13 +298,14 @@
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(text, 256, 64);
             const texture = new THREE.CanvasTexture(canvas);
-            const geometry = new THREE.PlaneGeometry(size * 4, size);
+            const scaledSize = size * textScale;
+            const geometry = new THREE.PlaneGeometry(scaledSize * 4, scaledSize);
             const material = new THREE.MeshStandardMaterial({
                 map: texture, transparent: true, side: THREE.DoubleSide, roughness: 0.1, metalness: 0.9,
                 emissive: new THREE.Color(0x00bfff), emissiveIntensity: 1.4
             });
             const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.y = yOffset;
+            mesh.position.y = yOffset * textScale;
             const depthGroup = new THREE.Group();
             for (let j = 0; j < 10; j++) {
                 let layer = mesh.clone(); layer.position.z = -j * 0.07;
@@ -332,8 +336,9 @@
             const ambientLight = new THREE.AmbientLight(0x404040, 1.8); scene.add(ambientLight);
 
             textGroup3D = new THREE.Group();
-            const nameMesh = createSolid3DText("BÍCH THỦY", 0.9, 1.8);
-            const numMesh  = createSolid3DText("27", -1.1, 2.0);
+            const TS = getResponsiveTextScale();
+            const nameMesh = createSolid3DText("BÍCH THỦY", 0.9, 1.8, TS);
+            const numMesh  = createSolid3DText("27", -1.1, 2.0, TS);
             textGroup3D.add(nameMesh); textGroup3D.add(numMesh);
             textGroup3D.position.set(0, 0.5, 0); textGroup3D.scale.set(0, 0, 0);
             scene.add(textGroup3D);
