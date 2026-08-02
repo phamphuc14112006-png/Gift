@@ -110,21 +110,21 @@
 </head>
 <body>
 
-    <div id="password-overlay">
+    <div id="password-overlay" >
         <div class="pwd-box">
-            <h3>TRANG WEB ĐƯỢC BẢO MẬT </h3>
+            <h3>NHẬP MẬT KHẨU ĐỂ MỞ</h3>
             <div class="pwd-input-wrapper">
-                <input type="password" id="pwd-input" placeholder="Nhập mật khẩu..." onkeydown="if(event.key==='Enter') checkPassword()">
+                <input type="password" id="pwd-input" placeholder="Từ 4-12 số" onkeydown="if(event.key==='Enter') checkPassword()">
             </div>
             <button onclick="checkPassword()">XÁC NHẬN</button>
-            <div id="pwd-error">Mật khẩu chưa chính xác rồi nha! 🥺</div>
+            <div id="pwd-error">GỢI Ý: SỐ CHỈ LIÊN QUAN, GẮN LIỀN VÀ KO ĐỔI </div>
         </div>
     </div>
 
-    <audio id="bg-music" src="nhac.mp3" preload="auto" loop></audio>
+    <audio id="bg-music" src="nhac.mp3" preload="auto"></audio>
 
     <div id="start-overlay" onclick="startExperience()">
-        <h2>BẤM VÀO ĐÂY ĐỂ BẮT ĐẦU </h2>
+        <h2>BẤM ĐỂ BẮT ĐẦU </h2>
     </div>
 
     <div id="ui-layer">
@@ -186,14 +186,40 @@
     <canvas id="webgl-canvas"></canvas>
 
     <script>
-        function checkPassword() {
+        // Hàm băm chuỗi sử dụng SHA-256 chuẩn của trình duyệt
+        async function hashString(str) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(str);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // Mã hash cố định của mật khẩu (đã được băm ẩn)
+        const TARGET_HASH = "514c91742967e4d505c3a047c6009aca5f76bfe1e37e3d48505c0fd75aabc2c6";
+
+        async function checkPassword() {
             const input = document.getElementById('pwd-input').value;
             const errorHint = document.getElementById('pwd-error');
-            if (input === '079199012523') {
+            
+            // Băm giá trị người dùng vừa nhập để kiểm tra ngầm
+            const inputHash = await hashString(input);
+
+            if (inputHash === TARGET_HASH) {
                 const overlay = document.getElementById('password-overlay');
                 overlay.style.opacity = '0';
                 setTimeout(() => { overlay.style.display = 'none'; }, 800);
+
+                // Báo cho C++ biết mật khẩu đúng (chỉ hoạt động trong WebView2)
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage('PASSWORD_CORRECT');
+                }
             } else {
+                // Sai mật khẩu: xóa sạch ô nhập và bắt nhập lại từ đầu
+                const inputEl = document.getElementById('pwd-input');
+                inputEl.value = '';
+                inputEl.focus();
+
                 errorHint.style.display = 'block';
                 errorHint.style.animation = 'none';
                 errorHint.offsetHeight;
@@ -247,10 +273,15 @@
         let clock = new THREE.Clock();
         let currentShape = "vortex";
         let hbdCoordsCache = [];
+        let candle2Fill = [], candle2Outline = [];
+        let candle7Fill = [], candle7Outline = [];
+        let candleSystem = null;
+        let flameSystem = null;
+        let candleFlameData = null;
 
         const audio = document.getElementById('bg-music');
 
-        const HEART_TOTAL_TIME  = 8.0;
+        const HEART_TOTAL_TIME  = 5.0;
         const TEXT_REV_DURATION = 2.5;
         const TEXT_DIRECTION    = 1;
 
@@ -262,9 +293,65 @@
         const pulseProxy = { value: 1 };
         let heartPulseScale = 1;
 
+        // 7 màu cầu vồng đậm (7/10 thân bánh); 3/10 bạc
+        let cakeSparkleData = null;
+        const CAKE_SPARKLE_PALETTE = [
+            [1.00, 0.12, 0.12],
+            [1.00, 0.48, 0.05],
+            [1.00, 0.92, 0.08],
+            [0.12, 0.95, 0.28],
+            [0.12, 0.42, 1.00],
+            [0.48, 0.12, 0.95],
+            [0.95, 0.12, 0.72]
+        ];
+        // #E3A8B5 hồng phấn pastel — dùng tông hồng nhạt đồng nhất cho toàn bộ hạt nến số 27
+        const LOTUS_PINK = [1.00, 0.86, 0.90];
+        const LOTUS_PINK_EDGE = [1.00, 0.86, 0.90];
+        const LOTUS_PINK_HEX = 0xffdbe6; // dùng cho chất liệu số 27 dạng khối 3D bóng (cùng style số 30/08)
+
         window.addEventListener('DOMContentLoaded', () => {
             hbdCoordsCache = preRenderSplitText("HAPPY", "BIRTHDAY", 650, 260, 64, 0.32, 0.68, 34, 15);
+            const c2 = preRenderCandleDigit("2", 220, 320, 230);
+            candle2Fill = c2.fill; candle2Outline = c2.outline;
+            const c7 = preRenderCandleDigit("7", 220, 320, 230);
+            candle7Fill = c7.fill; candle7Outline = c7.outline;
         });
+
+        function preRenderCandleDigit(digit, width, height, fontSize) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.lineWidth = 28; ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff';
+            ctx.strokeText(digit, width / 2, height / 2);
+            ctx.fillText(digit, width / 2, height / 2);
+            const fillData = ctx.getImageData(0, 0, width, height).data;
+
+            const canvas2 = document.createElement('canvas');
+            canvas2.width = width; canvas2.height = height;
+            const ctx2 = canvas2.getContext('2d');
+            ctx2.fillStyle = '#000'; ctx2.fillRect(0, 0, width, height);
+            ctx2.font = `bold ${fontSize}px Arial`;
+            ctx2.textAlign = 'center'; ctx2.textBaseline = 'middle';
+            ctx2.lineWidth = 38; ctx2.strokeStyle = '#fff';
+            ctx2.strokeText(digit, width / 2, height / 2);
+            const outlineRaw = ctx2.getImageData(0, 0, width, height).data;
+
+            const fill = [], outline = [];
+            const sx = 5.5, sy = 7.5;
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const px = ((x / width) - 0.5) * sx;
+                    const py = -((y / height) - 0.5) * sy;
+                    if (fillData[idx] > 140) fill.push({ x: px, y: py });
+                    else if (outlineRaw[idx] > 140) outline.push({ x: px, y: py });
+                }
+            }
+            return { fill, outline };
+        }
 
         function preRenderSplitText(line1, line2, width, height, fontSize, y1Factor, y2Factor, scaleX, scaleY) {
             const canvas = document.createElement('canvas');
@@ -314,6 +401,53 @@
             return depthGroup;
         }
 
+        // Số 27 dạng khối 3D đặc (style SVG: lớp sâu hồng đậm + mặt trước hồng tươi, không viền đen, không nhựa)
+        // frontHex = mặt trước sáng (#ffb6c1), depthHex = lớp đổ khối đậm hơn (#d47385)
+        function createGlowDigitMesh(text, x, y, z, width, height, frontHex, depthHex) {
+            const frontCol = frontHex != null ? frontHex : 0xffb6c1;
+            const depthCol = depthHex != null ? depthHex : 0xd47385;
+
+            // Canvas alpha mask: chữ trắng đặc trên nền trong suốt (tránh viền đen)
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, 512, 512);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 380px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 256, 270);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.premultiplyAlpha = true;
+            texture.needsUpdate = true;
+
+            const geometry = new THREE.PlaneGeometry(width, height);
+            const group = new THREE.Group();
+            const layers = 12;
+            const stepZ = 0.055;
+
+            for (let j = 0; j < layers; j++) {
+                const t = j / (layers - 1);
+                const isFront = j === 0;
+                const col = isFront ? frontCol : depthCol;
+                const intensity = isFront ? 1.0 : (0.75 - t * 0.25);
+                const mat = new THREE.MeshBasicMaterial({
+                    map: texture,
+                    color: new THREE.Color(col).multiplyScalar(intensity),
+                    transparent: true,
+                    alphaTest: 0.15,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
+                    blending: THREE.NormalBlending
+                });
+                const mesh = new THREE.Mesh(geometry, mat);
+                mesh.position.z = -j * stepZ;
+                group.add(mesh);
+            }
+            group.position.set(x, y, z);
+            return group;
+        }
+
         function startExperience() {
             document.getElementById('start-overlay').style.display = 'none';
             audio.play().catch(e => console.log("Audio play blocked", e));
@@ -338,7 +472,7 @@
             textGroup3D = new THREE.Group();
             const TS = getResponsiveTextScale();
             const nameMesh = createSolid3DText("BÍCH THỦY", 0.9, 1.8, TS);
-            const numMesh  = createSolid3DText("27", -1.1, 2.0, TS);
+            const numMesh  = createSolid3DText("30/08", -1.1, 2.0, TS);
             textGroup3D.add(nameMesh); textGroup3D.add(numMesh);
             textGroup3D.position.set(0, 0.5, 0); textGroup3D.scale.set(0, 0, 0);
             scene.add(textGroup3D);
@@ -370,9 +504,23 @@
             pCtx.fillStyle = grad; pCtx.fillRect(0,0,16,16);
             const pTexture = new THREE.CanvasTexture(pCanvas);
 
+            // Texture hạt dạng viên bi 3D (có điểm sáng lệch tâm + viền tối) dùng cho nến số 27
+            const bCanvas = document.createElement('canvas'); bCanvas.width = 32; bCanvas.height = 32;
+            const bCtx = bCanvas.getContext('2d');
+            let bGrad = bCtx.createRadialGradient(12, 11, 0, 16, 16, 17);
+            bGrad.addColorStop(0,    'rgba(255,255,255,1)');
+            bGrad.addColorStop(0.25, 'rgba(255,255,255,0.95)');
+            bGrad.addColorStop(0.55, 'rgba(255,255,255,0.75)');
+            bGrad.addColorStop(0.8,  'rgba(255,255,255,0.35)');
+            bGrad.addColorStop(1,    'rgba(255,255,255,0)');
+            bCtx.fillStyle = bGrad; bCtx.fillRect(0, 0, 32, 32);
+            const beadTexture = new THREE.CanvasTexture(bCanvas);
+            window.__beadTexture = beadTexture;
+
             const material = new THREE.PointsMaterial({
-                size: 0.02, map: pTexture, vertexColors: true,
-                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+                size: 0.03, map: pTexture, vertexColors: true,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+                sizeAttenuation: true
             });
             particleSystem = new THREE.Points(geometry, material);
             scene.add(particleSystem);
@@ -387,8 +535,96 @@
             else if (currentShape === "vortex" || currentShape === "cake") { particleSystem.rotation.y += 0.005; }
             else { particleSystem.rotation.y = 0; }
 
+            // Nến 27 và lửa không quay theo bánh
+            if (candleSystem) candleSystem.rotation.y = 0;
+            if (flameSystem) flameSystem.rotation.y = 0;
+
             if (isHeartRotating) { updateHeartPhase(time); }
+            if (currentShape === "cake" && cakeSparkleData) { updateCakeSparkle(time); }
+            if (currentShape === "cake" && candleFlameData) { updateCandleFlames(time); }
             renderer.render(scene, camera);
+        }
+
+        // Nhiễu giả ngẫu nhiên: tổng nhiều sóng sin tần số lệch nhau (tỉ lệ vô tỉ) để không
+        // tạo cảm giác lặp lại đều đặn — dùng cho mọi dao động của ngọn lửa bên dưới.
+        function flameNoise(t, seed) {
+            return Math.sin(t * 1.00 + seed) * 0.35
+                 + Math.sin(t * 0.372 + seed * 2.13) * 0.28
+                 + Math.sin(t * 0.631 + seed * 0.61) * 0.22
+                 + Math.sin(t * 0.157 + seed * 3.77) * 0.15;
+        }
+
+        // Ngọn lửa bập bùng chân thực: không đồng bộ theo một chu kỳ cố định —
+        // lúc hẹp lúc phình, lúc cao lúc thấp, lúc như sắp tắt rồi bùng lên cháy thẳng.
+        // Mỗi ngọn lửa (số 2 và số 7) dùng một chu kỳ nhiễu riêng (seed lệch nhau)
+        // nên 2 bên cháy KHÔNG đồng đều — bên này có thể đang bùng cao, sáng, nghiêng
+        // một hướng trong khi bên kia đang lụi thấp, mờ, nghiêng hướng khác.
+        function updateCandleFlames(time) {
+            if (!flameSystem || !candleFlameData) return;
+            const pos = flameSystem.geometry.attributes.position;
+            const colAttr = flameSystem.geometry.attributes.color;
+            const { indices, baseX, baseY, baseZ, phases, amp, hRatio, S, colorR, colorG, colorB, centerX, footY } = candleFlameData;
+            const unit = S || 1;
+
+            // Mỗi ngọn lửa (số 2 và số 7) có nhịp bập bùng RIÊNG — dùng seed lệch nhau
+            // để 2 bên không còn cháy giống hệt nhau: bên này bùng cao/sáng thì bên kia
+            // có thể đang lụi thấp/mờ, và độ nghiêng gió cũng khác nhau.
+            function flameParamsForSeed(seedOff) {
+                const windLeanX = flameNoise(time * 0.5, 11.3 + seedOff);
+                const windLeanZ = flameNoise(time * 0.42 + 4, 6.6 + seedOff) * 0.5;
+                const widthPulse = 1 + flameNoise(time * 0.85 + 2.2, 9.1 + seedOff) * 0.4;
+                const heightNoise = flameNoise(time * 1.05, 1.0 + seedOff);
+                const dimEvent = Math.max(0, -flameNoise(time * 0.48 + 8, 4.2 + seedOff) - 0.15);
+                const flareEvent = Math.max(0, flameNoise(time * 0.6 + 15, 2.8 + seedOff) - 0.35);
+                const heightScale = 1 + heightNoise * 0.3 - dimEvent * 1.3 + flareEvent * 0.9;
+                const brightnessMod = 1 + heightNoise * 0.2 - dimEvent * 1.1 + flareEvent * 0.5;
+                const widthFromEvent = 1 - dimEvent * 0.35 + flareEvent * 0.25;
+                return { windLeanX, windLeanZ, widthPulse, heightScale, brightnessMod, widthFromEvent };
+            }
+            // seedOff = 0 cho số "2", lệch hẳn (100) cho số "7" → 2 chu kỳ nhiễu độc lập nhau
+            const P2 = flameParamsForSeed(0);
+            const P7 = flameParamsForSeed(100);
+
+            for (let k = 0; k < indices.length; k++) {
+                const i = indices[k];
+                const idx = i * 3;
+                const ph = phases[k];
+                const hr = hRatio ? hRatio[k] : 1;
+                const a = amp[k];
+                const cx = centerX ? centerX[k] : 0;
+                const P = cx < 0 ? P2 : P7;
+                const { windLeanX, windLeanZ, widthPulse, heightScale, brightnessMod, widthFromEvent } = P;
+
+                // Bán kính gốc quanh trục ngọn lửa (đã tách khỏi tâm) → co giãn theo widthPulse
+                const radialX = (baseX[k] - cx) * widthPulse * widthFromEvent;
+                const radialZ = baseZ[k] * widthPulse * widthFromEvent;
+
+                // Nghiêng theo gió riêng của từng ngọn lửa: gốc gần như cố định, càng lên cao càng nghiêng nhiều
+                const tiltX = windLeanX * hr * hr * 1.05 * unit;
+                const tiltZ = windLeanZ * hr * hr * 0.7 * unit;
+
+                // Rung nhỏ riêng từng hạt — không đồng bộ, để lửa trông "sống", không đều tăm tắp
+                const jitterX = Math.sin(time * 6.3 + ph * 1.9) * a * 0.24 + Math.sin(time * 2.1 + ph * 3.1) * a * 0.15;
+                const jitterZ = Math.cos(time * 5.1 + ph * 1.4) * a * 0.2 + Math.cos(time * 1.7 + ph * 2.6) * a * 0.13;
+
+                // Chiều cao: co giãn quanh điểm chân lửa cố định (footY), cộng rung nhỏ riêng từng hạt
+                const heightFromFoot = (baseY[k] - footY) * heightScale;
+                const jitterY = Math.sin(time * 5.7 + ph * 2.3) * a * 0.3;
+
+                pos.array[idx]     = cx + radialX + tiltX + jitterX;
+                pos.array[idx + 1] = footY + heightFromFoot + jitterY;
+                pos.array[idx + 2] = radialZ + tiltZ + jitterZ;
+
+                // Nhấp nháy độ sáng theo nhịp bập bùng, thêm chút rung riêng từng hạt
+                if (colAttr && colorR) {
+                    const flick = brightnessMod + Math.sin(time * 8.6 + ph * 1.6) * 0.05;
+                    colAttr.array[idx]     = Math.min(1, Math.max(0, colorR[k] * flick));
+                    colAttr.array[idx + 1] = Math.min(1, Math.max(0, colorG[k] * flick));
+                    colAttr.array[idx + 2] = Math.min(1, Math.max(0, colorB[k] * flick));
+                }
+            }
+            pos.needsUpdate = true;
+            if (colAttr) colAttr.needsUpdate = true;
         }
 
         function runMorph(targetX, targetY, targetZ, targetR, targetG, targetB, duration, ease, onComplete) {
@@ -424,6 +660,28 @@
             });
         }
 
+        function updateCakeSparkle(time) {
+            const colAttr = particleSystem.geometry.attributes.color;
+            const { indices, phases, speeds, baseColors, colorIndices } = cakeSparkleData;
+            const palette = CAKE_SPARKLE_PALETTE;
+
+            for (let k = 0; k < indices.length; k++) {
+                const i = indices[k];
+                const idx = i * 3;
+                const cyclePos = time * speeds[k] + phases[k];
+                const raw = Math.sin(cyclePos);
+                const flash = raw > 0 ? Math.pow(raw, 2.4) : 0;
+                const boost = 1.0 + flash * 3.5;
+                const [fr, fg, fb] = palette[colorIndices[k]];
+                const [br, bg, bb] = baseColors[k];
+                const mix = Math.min(1, flash * 1.4);
+                colors[idx]   = Math.min(1.0, (br * (1 - mix) + fr * mix) * boost);
+                colors[idx+1] = Math.min(1.0, (bg * (1 - mix) + fg * mix) * boost);
+                colors[idx+2] = Math.min(1.0, (bb * (1 - mix) + fb * mix) * boost);
+            }
+            colAttr.needsUpdate = true;
+        }
+
         function setTextShape() {
             currentShape = "text";
             const coords = hbdCoordsCache;
@@ -450,7 +708,7 @@
 
             gsap.to(textGroup3D.scale, { x: 1, y: 1, z: 1, duration: 3.0, ease: "back.out(1.2)", delay: 0.8 });
 
-            const S = getResponsiveScale();   // ← scale responsive
+            const S = getResponsiveScale();
 
             const targetX = new Float32Array(particleCount);
             const targetY = new Float32Array(particleCount);
@@ -463,16 +721,24 @@
                 const phi = Math.random() * Math.PI * 2;
                 const theta = Math.random() * Math.PI;
                 const sinT = Math.sin(theta);
-                const bx = 16 * Math.pow(sinT, 3) * Math.sin(phi) * 0.82 * S;
+                // Hệ số bán kính ngẫu nhiên (phân bố đều theo diện tích) để hạt lấp đầy khối trong,
+                // không chỉ nằm trên đúng viền bề mặt trái tim như trước
+                const fillFactor = Math.sqrt(Math.random());
+                const isSurface = Math.random() > 0.55; // một phần hạt vẫn bám viền để giữ đường nét rõ
+                const radialFactor = isSurface ? 1.0 : fillFactor;
+
+                const bx = 16 * Math.pow(sinT, 3) * Math.sin(phi) * radialFactor * 0.82 * S;
                 const by = (13 * Math.cos(theta) - 5 * Math.cos(2*theta) - 2 * Math.cos(3*theta) - Math.cos(4*theta)) * 0.82 * S + 2 * S;
-                const bz = (12 * Math.pow(sinT, 3) * Math.cos(phi)) * (0.35 + Math.random() * 0.45) * 0.82 * S;
+                const bz = (12 * Math.pow(sinT, 3) * Math.cos(phi)) * (0.35 + Math.random() * 0.45) * radialFactor * 0.82 * S;
 
                 baseX[i] = bx; baseY[i] = by; baseZ[i] = bz;
                 targetX[i] = bx; targetY[i] = by; targetZ[i] = bz;
                 const isBright = Math.random() > 0.4;
-                targetR[i] = isBright ? 1.0 : 0.9;
-                targetG[i] = isBright ? 0.12 : 0.0;
-                targetB[i] = isBright ? 0.55 : 0.25;
+                // Hạt càng gần lõi (radialFactor nhỏ) thì màu đỏ đậm hơn, hạt viền thì hồng sáng hơn -> nhìn rõ khối thay vì phẳng
+                const coreMix = isSurface ? 1.0 : radialFactor;
+                targetR[i] = isBright ? 1.0 : 0.85 * coreMix + 0.15;
+                targetG[i] = isBright ? 0.12 * coreMix : 0.0;
+                targetB[i] = isBright ? 0.55 * coreMix : 0.20 * coreMix;
             }
 
             runMorph(targetX, targetY, targetZ, targetR, targetG, targetB, 4.5, "power2.inOut", () => {
@@ -491,7 +757,6 @@
                 positions[idx+2] = baseZ[i] * scale;
             }
             particleSystem.geometry.attributes.position.needsUpdate = true;
-            textGroup3D.rotation.y = TEXT_DIRECTION * elapsed * (Math.PI * 2 / TEXT_REV_DURATION);
             if (elapsed >= HEART_TOTAL_TIME && !heartCycleResolved) {
                 heartCycleResolved = true; isHeartRotating = false;
                 if (heartbeatTimeline) { heartbeatTimeline.kill(); heartbeatTimeline = null; }
@@ -514,49 +779,181 @@
             currentShape = "cake-forming";
             gsap.to(textGroup3D.scale, { x: 0, y: 0, z: 0, duration: 1.5, ease: "power2.in" });
 
-            const S = getResponsiveScale();   // ← scale responsive
+            const S = getResponsiveScale();
+            const N = particleCount;
 
-            const targetX = new Float32Array(particleCount);
-            const targetY = new Float32Array(particleCount);
-            const targetZ = new Float32Array(particleCount);
-            const targetR = new Float32Array(particleCount);
-            const targetG = new Float32Array(particleCount);
-            const targetB = new Float32Array(particleCount);
+            // ── Bánh (hệ hạt chính — có quay) ──────────────────────────────
+            const targetX = new Float32Array(N);
+            const targetY = new Float32Array(N);
+            const targetZ = new Float32Array(N);
+            const targetR = new Float32Array(N);
+            const targetG = new Float32Array(N);
+            const targetB = new Float32Array(N);
 
-            for (let i = 0; i < particleCount; i++) {
+            const sparkleIndices = [];
+            const sparkleBaseColors = [];
+            const sparkleColorIndices = [];
+
+            // Đế 14% | thân 70% | kem 16%  (toàn bộ particleCount dùng cho bánh)
+            const iBaseEnd = Math.floor(N * 0.14);
+            const iBodyEnd = Math.floor(N * 0.84);
+
+            for (let i = 0; i < N; i++) {
                 let tx, ty, tz, r, g, b;
-                if (i < particleCount * 0.15) {
-                    // đế bánh
+                if (i < iBaseEnd) {
                     const theta = Math.random() * Math.PI * 2;
                     const radius = 14 * Math.sqrt(Math.random()) * S;
                     tx = Math.sin(theta) * radius; ty = -8 * S; tz = Math.cos(theta) * radius;
-                    r = 0.75; g = 0.55; b = 0.15;
-                } else if (i < particleCount * 0.70) {
-                    // thân bánh
+                    r = 0.78; g = 0.55; b = 0.12;
+                } else if (i < iBodyEnd) {
                     const theta = Math.random() * Math.PI * 2;
                     const radius = 10.5 * (0.88 + Math.random() * 0.12) * S;
                     tx = Math.sin(theta) * radius; ty = (-8 + Math.random() * 9) * S; tz = Math.cos(theta) * radius;
-                    r = 1.0; g = 0.85; b = 0.0;
-                } else if (i < particleCount * 0.85) {
-                    // kem trên
-                    tx = (Math.random() - 0.5) * 0.6 * S; ty = (1 + Math.random() * 4) * S; tz = (Math.random() - 0.5) * 0.6 * S;
-                    r = 0.85; g = 0.85; b = 0.85;
+                    // 10 phần: 7 màu cầu vồng + 3 bạc
+                    const bodyIdx = i - iBaseEnd;
+                    const bodyTotal = iBodyEnd - iBaseEnd;
+                    const bucket = Math.floor((bodyIdx / bodyTotal) * 10); // 0..9
+                    if (bucket < 7) {
+                        const ci = bucket;
+                        const [cr, cg, cb] = CAKE_SPARKLE_PALETTE[ci];
+                        r = cr * 0.5; g = cg * 0.5; b = cb * 0.5;
+                        sparkleIndices.push(i);
+                        sparkleBaseColors.push([r, g, b]);
+                        sparkleColorIndices.push(ci);
+                    } else {
+                        r = 0.70; g = 0.72; b = 0.76;
+                    }
                 } else {
-                    // nến
-                    const randTheta = Math.random() * Math.PI * 2;
-                    const h = Math.random() * 4.0;
-                    const widthFactor = Math.sin((h / 4.0) * Math.PI) * (1.0 - (h / 4.0) * 0.5) * 1.1 * S;
-                    tx = Math.sin(randTheta) * widthFactor; ty = (5.0 + h) * S; tz = Math.cos(randTheta) * widthFactor;
-                    if (h < 0.5) { r = 0.1; g = 0.5; b = 1.0; }
-                    else if (h < 2.5) { r = 1.0; g = 0.65; b = 0.0; }
-                    else { r = 1.0; g = 0.1; b = 0.0; }
+                    // Kem trắng mặt bánh
+                    const theta = Math.random() * Math.PI * 2;
+                    const radius = 9.8 * Math.sqrt(Math.random()) * S;
+                    tx = Math.sin(theta) * radius; ty = (0.9 + Math.random() * 1.1) * S; tz = Math.cos(theta) * radius;
+                    r = 0.94; g = 0.94; b = 0.96;
                 }
                 targetX[i] = tx; targetY[i] = ty; targetZ[i] = tz;
-                targetR[i] = r;  targetG[i] = g;  targetB[i] = b;
+                targetR[i] = r; targetG[i] = g; targetB[i] = b;
             }
+
+            // ── Nến 27 (khối 3D bóng — cùng style số 30/08, KHÔNG quay) ─────
+            const CN = Math.min(45000, Math.floor(N * 0.30));
+            const flameIndices = [], flameBaseX = [], flameBaseY = [], flameBaseZ = [], flamePhases = [], flameAmp = [], flameHRatio = [];
+            const flameColorR = [], flameColorG = [], flameColorB = [], flameCenterX = [];
+
+            // Chân số gần sát mặt bánh (cắm vào bánh)
+            const cakeTopY = 2.0 * S;
+            // Số to hơn một tí, hai số đứng gần nhau hơn
+            const digitScale = 0.45 * S;
+            const digitYScale = digitScale * 1.28;
+            // Hai số gần nhau hơn (kèm lửa)
+            const offset2X = -1.70 * S;
+            const offset7X =  1.70 * S;
+            // Hạ chân số chìm xuống dưới bề mặt kem; nâng nhẹ để không lộ đáy
+            const digitYBase = cakeTopY - 0.25 * S;
+
+            const nFlame2 = Math.floor(CN * 0.12);
+            const nFlameTotal = nFlame2 * 2;
+            const flamePos = new Float32Array(nFlameTotal * 3);
+            const flameCol = new Float32Array(nFlameTotal * 3);
+            let fIdx = 0;
+
+            for (let i = 0; i < nFlameTotal; i++) {
+                let tx, ty, tz, r, g, b;
+                const onDigit2 = i < nFlame2;
+                const cx = onDigit2 ? offset2X : offset7X;
+                // Lửa trên số 2 / số 7 — nằm chính giữa đầu mỗi chữ số
+                const h = Math.random() * 2.3;
+                const w = Math.sin((h / 2.3) * Math.PI) * (1.0 - h / 2.3 * 0.4) * 0.30 * S;
+                const ang = Math.random() * Math.PI * 2;
+                tx = cx + Math.cos(ang) * w;
+                ty = digitYBase + 7.6 * digitYScale + h * 0.75 * S;
+                tz = Math.sin(ang) * w;
+                if (h < 0.45) { r = 0.3; g = 0.6; b = 1.0; }
+                else if (h < 1.5) { r = 1.0; g = 0.88; b = 0.25; }
+                else { r = 1.0; g = 0.4; b = 0.08; }
+                flameIndices.push(fIdx);
+                flameBaseX.push(tx); flameBaseY.push(ty); flameBaseZ.push(tz);
+                flamePhases.push(Math.random() * Math.PI * 2);
+                flameAmp.push(0.08 * S + Math.random() * 0.12 * S);
+                flameHRatio.push(h / 2.3);
+                flameColorR.push(r); flameColorG.push(g); flameColorB.push(b);
+                flameCenterX.push(cx);
+                const fi = fIdx++ * 3;
+                flamePos[fi] = tx; flamePos[fi+1] = ty; flamePos[fi+2] = tz;
+                flameCol[fi] = r; flameCol[fi+1] = g; flameCol[fi+2] = b;
+            }
+
+            // Tạo / cập nhật candleSystem (số 27 dạng khối 3D bóng — cùng style số 30/08, giữ màu hồng)
+            if (candleSystem) {
+                scene.remove(candleSystem);
+                candleSystem.traverse(obj => {
+                    if (obj.isMesh) {
+                        obj.geometry.dispose();
+                        if (obj.material.map) obj.material.map.dispose();
+                        obj.material.dispose();
+                    }
+                });
+                candleSystem = null;
+            }
+            const digitCenterY = digitYBase + 4.0 * digitYScale;
+            // To hơn một tí, gần nhau; màu giống SVG (#ffb6c1 mặt trước, #d47385 lớp sâu)
+            const digitWidth  = 3.15 * S;
+            const digitHeight = 4.15 * S;
+            const FRONT_PINK = 0xffb6c1;
+            const DEPTH_PINK = 0xd47385;
+            candleSystem = new THREE.Group();
+            const digit2 = createGlowDigitMesh("2", offset2X, digitCenterY, 0, digitWidth, digitHeight, FRONT_PINK, DEPTH_PINK);
+            const digit7 = createGlowDigitMesh("7", offset7X, digitCenterY, 0, digitWidth, digitHeight, FRONT_PINK, DEPTH_PINK);
+            candleSystem.add(digit2);
+            candleSystem.add(digit7);
+            candleSystem.visible = false;
+            scene.add(candleSystem);
+
+            // Tạo / cập nhật flameSystem (hệ hạt lửa riêng — vẫn cộng sáng để lung linh)
+            if (flameSystem) {
+                scene.remove(flameSystem);
+                flameSystem.geometry.dispose();
+                flameSystem.material.dispose();
+                flameSystem = null;
+            }
+            const fGeo = new THREE.BufferGeometry();
+            fGeo.setAttribute('position', new THREE.BufferAttribute(flamePos, 3));
+            fGeo.setAttribute('color', new THREE.BufferAttribute(flameCol, 3));
+            const fMat = new THREE.PointsMaterial({
+                size: 0.10, map: particleSystem.material.map, vertexColors: true,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+                sizeAttenuation: true
+            });
+            flameSystem = new THREE.Points(fGeo, fMat);
+            flameSystem.visible = false;
+            scene.add(flameSystem);
 
             runMorph(targetX, targetY, targetZ, targetR, targetG, targetB, 5.5, "power3.inOut", () => {
                 currentShape = "cake";
+                if (particleSystem && particleSystem.material) {
+                    particleSystem.material.size = 0.045;
+                }
+                if (candleSystem) {
+                    candleSystem.visible = true;
+                    candleSystem.rotation.y = 0;
+                }
+                if (flameSystem) {
+                    flameSystem.visible = true;
+                    flameSystem.rotation.y = 0;
+                }
+                candleFlameData = {
+                    indices: flameIndices,
+                    baseX: flameBaseX, baseY: flameBaseY, baseZ: flameBaseZ,
+                    phases: flamePhases, amp: flameAmp, hRatio: flameHRatio, S: S,
+                    colorR: flameColorR, colorG: flameColorG, colorB: flameColorB,
+                    centerX: flameCenterX, footY: digitYBase + 7.6 * digitYScale
+                };
+                cakeSparkleData = {
+                    indices: sparkleIndices,
+                    baseColors: sparkleBaseColors,
+                    colorIndices: sparkleColorIndices,
+                    phases: sparkleIndices.map(() => Math.random() * Math.PI * 2),
+                    speeds: sparkleIndices.map(() => 1.4 + Math.random() * 2.4)
+                };
                 gsap.to("#btn-thoi", { opacity: 1, y: 0, duration: 1.5, delay: 0.3 });
             });
         }
